@@ -1,0 +1,184 @@
+#!/bin/bash
+clear
+echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+echo "*           Minecraft server manager           *"
+echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+
+
+launch(){
+	if [ -e /opt/minecraft/server/$serveur ]; then
+		cd /opt/minecraft/server/$serveur
+
+		echo
+        	echo "  ~~ Launching : "$serveur" ~~"
+		echo
+
+	        sudo java -Xmx1024M -Xms1024M -jar server.jar nogui
+	else
+                echo "ERROR ! DIR DO NOT EXIST !"
+	fi
+}
+
+create(){
+	if [ -e /opt/minecraft/server/$serveur ]; then
+		echo "ERROR ! Server already exist !"
+	else
+		sudo mkdir /opt/minecraft/server/$serveur
+
+		if [ "$2" = "" ]; then
+			read -p "Enter the server's version : " version
+		else
+			version=$2
+		fi
+
+		url=https://mcversions.net/download/$version
+		wget "$url" -q
+
+		if [ -e /opt/minecraft/$version ]; then
+			echo
+			echo "Download " $serveur " in " $version ", please wait"
+			echo
+
+			sed -i 's/"/\n/g' $version
+			serv_url=$(grep server.jar $version)
+			sudo wget $serv_url -O /opt/minecraft/server/$serveur/server.jar -q
+
+			echo
+			echo "Eula approval, in progress"
+			echo
+			cd /opt/minecraft/server/$serveur/
+			sudo java -Xmx1024M -Xms1024M -jar server.jar nogui > /dev/null
+
+			sudo sed -i "s/false/true/" eula.txt
+
+			sudo sed -i "s/motd=A Minecraft Server/motd=A ^\u00A7kMinecraft^\u00A7r Server/" server.properties
+		else
+			echo "ERROR ! Invalid server version !"
+			echo $version
+		fi
+		sudo rm /opt/minecraft/$version
+	fi
+}
+
+changeproperties() {
+	url=/opt/minecraft/server/$serveur/server.properties
+	while IFS= read -r line
+	do
+		quest=$(cut -d "=" -f1 <<< $line)
+		answer=$(cut -d "=" -f2 <<< $line)
+		if [ "$quest" = "$answer" ]; then
+			newLine="$quest"
+			echo "$newLine"
+		else
+			read -e -p "$quest=" -i "$answer" answer</dev/tty
+			newLine="$quest=$answer"
+		fi
+		sudo sed -i 's,"$line","$newLine",' $url
+	done < $url
+}
+
+if [ "$1" = "launch" ]; then
+	echo " ~~~ Launching server script ACTIVATE ! ~~~"
+
+	if [ "$2" = "" ]; then
+		read -p "Enter the server's name : " serveur
+
+	else
+		serveur=$2
+	fi
+
+	launch $serveur
+
+elif [ "$1" = "create" ]; then
+	echo
+	echo " ~~~ Creating server script ACTIVATE ! ~~~"
+	echo
+
+	if [ "$2" = "" ]; then
+                read -p "Enter the server's name : " serveur
+        else
+                serveur=$2
+        fi
+
+
+	create $serveur $3
+
+	if [ -e /opt/minecraft/server/$serveur/server.jar ]; then
+		echo "  ~READY TO GO~"
+		echo
+		echo "Do you want to launch ? (yes/no) : "
+		read yesno
+		if [ "$yesno" = "yes" ]; then
+			launch $serveur
+		fi
+	else
+		echo "ERROR ! Server creation has fail !"
+		sudo rm -r /opt/minecraft/server/$serveur
+	fi
+
+elif [ "$1" = "remove" -o "$1" = "rm" ]; then
+        echo
+        echo " ~~~ Removing server script ACTIVATE ! ~~~"
+        echo
+
+	if [ "$2" = "" ]; then
+		read -p "Enter the server's name : " serveur
+	else
+		serveur=$2
+	fi
+	if [ -e /opt/minecraft/server/$serveur ]; then
+		sudo rm -r /opt/minecraft/server/$serveur
+		echo "DONE ! " $serveur " is removed !"
+	else
+		echo "ERROR ! Server " $serveur " do not exist !"
+	fi
+
+elif [ "$1" = "changemap" -o "$1" = "chm" ]; then
+        echo
+        echo " ~~~ Changing server map script ACTIVATE ! ~~~"
+        echo
+
+        if [ "$2" = "" ]; then
+                read -p "Enter the server's name : " serveur
+        else
+                serveur=$2
+        fi
+        if [ -e /opt/minecraft/server/$serveur/world ]; then
+                sudo rm -r /opt/minecraft/server/$serveur/world
+                echo
+                echo "DONE ! " $serveur " map is changed !"
+        else
+                echo "ERROR ! Server " $serveur " do not exist !"
+        fi
+
+elif [ "$1" = "changeproperties" -o "$1" = "chp" ]; then
+	echo
+        echo " ~~~ Changing properties script ACTIVATE ! ~~~"
+        echo
+
+	if [ "$2" = "" ]; then
+                read -p "Enter the server's name : " serveur
+        else
+                serveur=$2
+	fi
+
+	if [ "$3" = "nano" ];then
+		sudo nano /opt/minecraft/server/$serveur/server.properties
+	else
+		changeproperties $serveur
+	fi
+	echo "Change DONE !"
+
+elif [ "$1" = "help" ]; then
+	echo "Possible commands : "
+	echo "~~~~~~~~~~~~COMMAND~~~~~~~~~~~~~~~|~~~~~~~~ARG optionnal~~~~~~~~"
+	echo "	 launch 			|   server_name"
+	echo "	 create 			|   server_name server_version"
+	echo "   remove(or rm) 			|   server_name "
+	echo "   changemap(or chm) 		|   server_name"
+	echo "   changeproperties(or chp)	|   server_name nano"
+	echo "	 help"
+
+else
+	echo "Error ! Check help !"
+fi
